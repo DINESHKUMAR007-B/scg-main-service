@@ -1,0 +1,260 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Layers for IVA BOT.
+
+Parameters:
+  Environment: 
+    Type: String
+    Description: environment
+  CompanyCode: 
+    Type: String
+  ApplicationCode: 
+    Type: String
+  AWSRegionAbbreviation: 
+    Type: String
+  S3AppFolder:
+    Type: String
+    Description: Name of the S3 artifacts app folder
+  BotName:
+    Type: String
+    Description: Name of the bot
+  ExecutionRole: 
+    Type: String
+    Description: Execution role
+  LambdaArn:
+    Type: String
+    Description: Master Lambda Arn
+  S3Arn:
+    Type: String
+    Description: location to store audio log
+  S3Key:
+    Type: String
+    Description: path in the s3 bucket
+    
+Resources:
+  LexBot:
+    Type: AWS::Lex::Bot
+    Properties:
+      AutoBuildBotLocales: true
+      BotFileS3Location:
+        S3Bucket: !Sub '${CompanyCode}-${ApplicationCode}-${Environment}-${AWSRegionAbbreviation}-s3-iva-artifacts'
+        S3ObjectKey: !Sub '${S3AppFolder}/artifacts/${S3Key}.zip'
+      BotTags:
+        - Key: "environment"
+          Value: !Sub ${Environment}
+        - Key: "billing-guid"
+          Value: "8134612e20ba3bbe918a41369c32025d"
+        - Key: "managed_by"
+          Value: "AFT"
+        - Key: "portfilio"
+          Value: !Sub ${ApplicationCode}
+        - Key: "unit"
+          Value: !Sub ${CompanyCode} 
+      DataPrivacy:
+        ChildDirected: false
+      Description: "This is a sample Lex bot"
+      IdleSessionTTLInSeconds: 300 
+      Name: !Sub '${CompanyCode}-${ApplicationCode}-${Environment}-${AWSRegionAbbreviation}-lex-${BotName}'
+      RoleArn: !Ref ExecutionRole
+   #english alias     
+  LexBotAliasEnglish:
+    Type: AWS::Lex::BotAlias
+    DependsOn: 
+      - LexBot
+      - LexBotVersion16042026  # Ensures that LexBotVersion16042026 is created before the BotAlias
+    Properties:
+      BotAliasName: mainenglish
+      BotId: !GetAtt LexBot.Id
+      BotVersion: !GetAtt LexBotVersion16042026.BotVersion
+      Description: Alias for english
+      BotAliasLocaleSettings:
+        - BotAliasLocaleSetting:
+            CodeHookSpecification:
+              LambdaCodeHook: 
+                CodeHookInterfaceVersion: "1.0"
+                LambdaArn: !Ref LambdaArn
+            Enabled: true
+          LocaleId: en_US
+        - BotAliasLocaleSetting:
+            CodeHookSpecification:
+              LambdaCodeHook: 
+                CodeHookInterfaceVersion: "1.0"
+                LambdaArn: !Ref LambdaArn
+            Enabled: false
+          LocaleId: es_US
+      ConversationLogSettings:
+        AudioLogSettings:
+          - Destination: 
+              S3Bucket: 
+                LogPrefix: !Sub 'lex-conversations/${Environment}-bot'
+                S3BucketArn: !Ref S3Arn
+            Enabled: true
+        TextLogSettings: 
+          - Destination:
+              CloudWatch: 
+                CloudWatchLogGroupArn: !GetAtt CloudWatchLogGroup.Arn
+                LogPrefix: !Sub 'lex-conversations/${Environment}-bot'
+            Enabled: true
+#spanish alias
+  LexBotAliasSpanish:
+    Type: AWS::Lex::BotAlias
+    DependsOn: 
+      - LexBot
+      - LexBotVersion16042026  # Ensures that LexBotVersion16042026 is created before the BotAlias
+    Properties:
+      BotAliasName: mainspanish
+      BotId: !GetAtt LexBot.Id
+      BotVersion: !GetAtt LexBotVersion16042026.BotVersion
+      Description: Alias for spanish
+      BotAliasLocaleSettings:
+        - BotAliasLocaleSetting:
+            CodeHookSpecification:
+              LambdaCodeHook: 
+                CodeHookInterfaceVersion: "1.0"
+                LambdaArn: !Ref LambdaArn
+            Enabled: true
+          LocaleId: es_US
+        - BotAliasLocaleSetting:
+            CodeHookSpecification:
+              LambdaCodeHook: 
+                CodeHookInterfaceVersion: "1.0"
+                LambdaArn: !Ref LambdaArn
+            Enabled: false
+          LocaleId: en_US
+      ConversationLogSettings:
+        AudioLogSettings:
+          - Destination: 
+              S3Bucket: 
+                LogPrefix: !Sub 'lex-conversations/${Environment}-bot'
+                S3BucketArn: !Ref S3Arn
+            Enabled: true
+        TextLogSettings: 
+          - Destination:
+              CloudWatch: 
+                CloudWatchLogGroupArn: !GetAtt CloudWatchLogGroup.Arn
+                LogPrefix: !Sub 'lex-conversations/${Environment}-bot'
+            Enabled: true
+
+  LexBotVersion16042026: 
+    Type: AWS::Lex::BotVersion
+    DependsOn: 
+      - LexBot
+    Properties:
+      BotId: !GetAtt LexBot.Id #The unique identifier of the bot.
+      BotVersionLocaleSpecification: 
+        - BotVersionLocaleDetails:
+            SourceBotVersion: "DRAFT" #The version of a bot used for a bot locale.
+          LocaleId: en_US
+        - BotVersionLocaleDetails:
+            SourceBotVersion: "DRAFT" #The version of a bot used for a bot locale.
+          LocaleId: es_US
+      Description: version 1
+
+  CloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lex/${CompanyCode}-${ApplicationCode}-${Environment}-${AWSRegionAbbreviation}-cloudwatch-${BotName}'
+      DataProtectionPolicy:
+        Name: data-protection-policy
+        Description: ""
+        Version: "2021-06-01"
+
+        Statement:
+
+          - Sid: audit-policy
+            DataIdentifier:
+              - sessionAttributes
+              - transcriptions
+              - publicKey
+              - content
+              - inputTranscript
+              - appSession
+              - s3Path
+              - originalValue
+              - resolvedValues
+              - interpretedValue
+            Operation:
+              Audit:
+                FindingsDestination: {}
+
+          - Sid: redact-policy
+            DataIdentifier:
+              - sessionAttributes
+              - transcriptions
+              - publicKey
+              - content
+              - inputTranscript
+              - appSession
+              - s3Path
+              - originalValue
+              - resolvedValues
+              - interpretedValue
+            Operation:
+              Deidentify:
+                MaskConfig: {}
+
+        Configuration:
+          CustomDataIdentifier:
+
+            - Name: sessionAttributes
+              Regex: "(publicKey|keyStorePw|trustStorePw|apiKey|apiValue|rootCert)\"\\s*:\\s*\"[^\"]*"
+
+            - Name: transcriptions
+              Regex: "transcription\"\\s*:\\s*\"\\d+"
+
+            - Name: publicKey
+              Regex: "enc2201_-----BEGIN PUBLIC KEY-----[\\s\\S]*?-----END PUBLIC KEY-----"
+
+            - Name: content
+              Regex: "content\"\\s*:\\s*\"(?:\\\\.|[^\"\\\\])*"
+
+            - Name: inputTranscript
+              Regex: "(inputTranscript|rawInputTranscript|rawTranscription|transcription)\"\\s*:\\s*\"(?:\\\\.|[^\"\\\\])*"
+
+            - Name: appSession
+              Regex: "(ANI|DNIS|participantID|apiKey|apiValue|keyStorePw|trustStorePw|publicKey|rootCert):[^|]*"
+
+            - Name: s3Path
+              Regex: "s3Path\"\\s*:\\s*\"[^\"]*"
+
+            - Name: originalValue
+              Regex: "originalValue\"\\s*:\\s*\"\\d+"
+
+            - Name: resolvedValues
+              Regex: "\"resolvedValues\"\\s*:\\s*\\[\\s*\"\\d+\"\\s*\\]"
+
+            - Name: interpretedValue
+              Regex: "interpretedValue\"\\s*:\\s*\"\\d+"
+      Tags:
+        - Key: "environment"
+          Value: !Sub ${Environment}
+        - Key: "billing-guid"
+          Value: "8134612e20ba3bbe918a41369c32025d"
+        - Key: "managed_by"
+          Value: "AFT"
+        - Key: "portfilio"
+          Value: !Sub ${ApplicationCode}
+        - Key: "unit"
+          Value: !Sub ${CompanyCode}  
+
+
+Outputs:
+  LexBotID:
+    Description: The unique identifier of the bot.
+    Value: !GetAtt LexBot.Id
+    Export:
+      Name: !Sub "LexBotIDExportMainService-${Environment}"
+  LexBotArn:
+    Description: The Amazon Resource Name (ARN) of the bot.
+    Value: !GetAtt LexBot.Arn
+    Export:
+      Name: !Sub "LexBotArnExportMainService-${Environment}"
+  LexBotAliasEnglishId:
+    Description: The unique identifier of the bot alias.
+    Value: !GetAtt LexBotAliasEnglish.BotAliasId
+    Export:
+      Name: !Sub "LexBotAliasEnglishIdExportMainService-${Environment}"
+  LexBotAliasSpanishId:
+    Description: The unique identifier of the bot alias.
+    Value: !GetAtt LexBotAliasSpanish.BotAliasId
+    Export:
+      Name: !Sub "LexBotAliasSpanishIdExportMainService-${Environment}"
